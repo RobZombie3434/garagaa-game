@@ -16,7 +16,7 @@ A retro-style Galaga game built with HTML5, CSS3, and JavaScript. This project a
 
 ## How to Play
 1. Clone the repository: `git clone https://github.com/yourusername/galaga-clone.git`
-2. Open `main-menu.html` in your browser to start the game.
+2. Open `index.html` in your browser to start the game.
 3. Use the arrow keys to move your ship and the spacebar to shoot.
 
 ## Contributing

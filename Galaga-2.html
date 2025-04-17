@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Retro Galaga Clone</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      background: black;
+      font-family: 'Press Start 2P', monospace;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+      margin: 0 auto;
+      background: black;
+      image-rendering: pixelated;
+    }
+    #scanlines {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      background: repeating-linear-gradient(
+        transparent 0px,
+        transparent 2px,
+        rgba(0, 0, 0, 0.1) 2px,
+        rgba(0, 0, 0, 0.1) 4px
+      );
+      z-index: 10;
+    }
+    #score {
+      color: #0f0;
+      font-size: 14px;
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 11;
+    }
+    #health {
+      color: #ff0;
+      font-size: 14px;
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 11;
+    }
+    footer {
+      position: absolute;
+      bottom: 10px;
+      width: 100%;
+      text-align: center;
+      color: white;
+      font-size: 14px;
+    }
+  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="score">SCORE: 0000</div>
+  <div id="health">HEALTH: 3</div>
+  <canvas id="gameCanvas" width="480" height="640"></canvas>
+  <div id="scanlines"></div>
+  <footer>
+    &copy; 2025 RobZombie3434
+  </footer>
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreDisplay = document.getElementById('score');
+    const healthDisplay = document.getElementById('health');
+
+   
+    
+    // Load assets
+    const bossImage = new Image();
+    bossImage.src = 'sprites/boss.png';
+
+    // Add a global boss object and bossProjectiles array
+    let boss = null;
+    let bossProjectiles = [];
+
+    let score = 0;
+    let playerHealth = 3;  // Player's health (starts at 3)
+    let frame = 0; // Ensure frame is defined
+
+    // Player
+    const player = {
+      x: canvas.width / 2 - 15,
+      y: canvas.height - 50,
+      width: 30,
+      height: 20,
+      speed: 4,
+      sprite: new Image(),
+      spriteLoaded: false
+    };
+
+    player.sprite.src = 'sprites/player.png';  // Local path to the image
+    player.sprite.onload = () => {
+      player.spriteLoaded = true;
+    };
+
+    // Popups for score display
+    const scorePopups = [];
+
+    // Enemy sprites
+const enemySprites = [
+  new Image(),
+  new Image(),
+  new Image(),
+  new Image()
+];
+
+// Define the paths to the enemy sprite images
+const enemySpritePaths = [
+  'sprites/enemy1.png', // Local enemy 1 sprite
+  'sprites/enemy2.png', // Local enemy 2 sprite
+  'sprites/enemy3.png', // Local enemy 3 sprite
+  'sprites/enemy4.png'  // Local enemy 4 sprite
+];
+
+// Load the enemy sprites
+let enemySpritesLoaded = 0;
+enemySprites.forEach((sprite, index) => {
+  sprite.src = enemySpritePaths[index];
+  sprite.onload = () => {
+    enemySpritesLoaded++;
+    if (enemySpritesLoaded === enemySprites.length) {
+      console.log("All enemy sprites loaded.");
+      // Start the game loop only after all sprites are loaded
+      gameLoop();
+    }
+  };
+});
+
+function gameLoop() {
+  // Your game loop logic here
+}
+
+// Ensure the game loop is not started before all sprites are loaded
+if (enemySpritesLoaded === enemySprites.length) {
+  gameLoop();
+}
+
+    // Bullets
+    const bullets = [];
+    let shootCooldown = 0;
+
+    // Explosions
+    const explosions = [];
+
+    // Waves
+    const waves = [
+      { enemies: [], created: false },
+      { enemies: [], created: false },
+      { enemies: [], created: false },
+      { enemies: [], created: false },
+      { enemies: [], created: false },
+      { enemies: [], created: false }
+    ];
+    let currentWave = 0;
+
+   const enemyColors = ['#f00', '#ff0', '#0f0', '#0ff', '#f0f'];
+
+    // Input
+    const keys = {};
+    document.addEventListener('keydown', e => keys[e.key] = true);
+    document.addEventListener('keyup', e => keys[e.key] = false);
+
+    // Load explosion sprite sheet
+    const explosionSprite = new Image();
+    explosionSprite.src = 'https://opengameart.org/sites/default/files/explosion-sheet.png';
+
+    function createWave(waveNumber) {
+  console.log(`Creating wave ${waveNumber}`);
+  if (!waves[waveNumber]) return;
+
+  if (waveNumber === 4) {
+    boss = {
+      x: canvas.width / 2 - 40,
+      y: -100,
+      targetY: 50,
+      width: 80,
+      height: 80,
+      health: 30,
+      fireCooldown: 0,
+      floatingIn: true
+    };
+
+    waves[waveNumber] = {
+      created: true,
+      enemies: []
+    };
+
+    for (let i = 0; i < 5; i++) {
+      waves[waveNumber].enemies.push({
+        x: 100 + i * 80,
+        y: 40,
+        baseX: 100 + i * 80,
+        width: 40,
+        height: 40,
+        offset: Math.random() * Math.PI * 2,
+        diving: false
+      });
+    }
+  } else {
+    waves[waveNumber] = {
+      created: true,
+      enemies: Array.from({ length: 12 }, (_, i) => ({
+        x: 60 + (i % 6) * 80,
+        y: 40 + Math.floor(i / 6) * 40,
+        baseX: 60 + (i % 6) * 80,
+        width: 40,
+        height: 40,
+        offset: Math.random() * Math.PI * 2,
+        diving: false
+      }))
+    };
+  }
+}
+    // Start the game loop
+    requestAnimationFrame(gameLoop);
+    
+   let lastFrameTime = 0;
+      const targetFrameRate = 3; // Desired frame rate in frames per second
+      const frameInterval = 1000 / targetFrameRate;
+
+      function gameLoop(timestamp) {
+        if (timestamp - lastFrameTime < frameInterval) {
+          requestAnimationFrame(gameLoop);
+          return;
+        }
+
+        lastFrameTime = timestamp;
+
+        update();
+        draw();
+
+        requestAnimationFrame(gameLoop);
+      }
+
+// Start the game loop
+requestAnimationFrame(gameLoop);
+
+
+    
+   function update() {
+  frame++;
+  console.log(`Frame: ${frame}, Current Wave: ${currentWave}, Score: ${score}`);
+
+  // Ensure currentWave is within the bounds of the waves array
+  if (currentWave >= waves.length) {
+    console.error(`Current wave index ${currentWave} is out of bounds. Waves array length: ${waves.length}`);
+    return; // Exit the function to prevent further errors
+  }
+
+  // Check if the current wave has been created, if not, create it
+  if (!waves[currentWave].created) {
+    console.log(`Creating wave ${currentWave}`);
+    createWave(currentWave);
+  }
+
+  const enemies = waves[currentWave].enemies;
+
+  // Move player
+  if (keys['ArrowLeft'] && player.x > 0) player.x -= player.speed;
+  if (keys['ArrowRight'] && player.x + player.width < canvas.width) player.x += player.speed;
+
+  // Shoot
+  if (shootCooldown > 0) shootCooldown--;
+  if (keys[' '] && shootCooldown <= 0) {
+    bullets.push({
+      x: player.x + player.width / 2 - 2,
+      y: player.y,
+      width: 4,
+      height: 10,
+      speed: 5, // Adjusted bullet speed
+      color: '#fff'
+    });
+    shootCooldown = 8;
+  }
+
+  // Update bullets
+  bullets.forEach((b, i) => {
+    b.y -= b.speed;
+    if (b.y < 0) bullets.splice(i, 1);
+  });
+
+  // Update enemies
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+    if (!e.diving && Math.random() < 0.002) {
+      e.diving = true;
+      e.diveStart = frame;
+    }
+
+    if (e.diving) {
+      const t = (frame - e.diveStart) * 0.1;
+      e.x += Math.sin(t * 2) * 2; // Adjusted enemy movement speed
+      e.y += 2; // Adjusted enemy movement speed
+      if (e.y > canvas.height || e.x < 0 || e.x > canvas.width) {
+        e.diving = false;
+        e.y = 40 + Math.floor(i / 6) * 40;
+        e.x = e.baseX;
+      }
+    } else {
+      e.x = e.baseX + Math.sin(frame * 0.05 + e.offset) * 10; // Adjusted enemy movement speed
+      e.y += Math.sin(frame * 0.01 + e.offset) * 0.2; // Adjusted enemy movement speed
+    }
+
+    // Remove enemies that move off the canvas
+    if (e.y > canvas.height || e.x < 0 || e.x > canvas.width) {
+      enemies.splice(i, 1);
+    }
+  }
+
+  // Handle boss if present
+  if (boss) {
+    if (boss.health <= 0) {
+      console.log("Boss defeated, moving to next wave.");
+      explosions.push({ x: boss.x + boss.width / 2, y: boss.y + boss.height / 2, frame: 0 });
+      boss = null;
+      bossProjectiles = [];
+      currentWave++;
+      return;
+    }
+
+    if (boss.floatingIn) {
+      boss.y += 1; // Adjusted boss movement speed
+      if (boss.y >= boss.targetY) {
+        boss.y = boss.targetY;
+        boss.floatingIn = false;
+      }
+    } else {
+      boss.x += Math.sin(frame * 0.03) * 1; // Adjusted boss movement speed
+
+      if (boss.fireCooldown > 0) boss.fireCooldown--;
+      if (boss.fireCooldown <= 0) {
+        const numBullets = 12;
+        for (let i = 0; i < numBullets; i++) {
+          const angle = (Math.PI * 2 * i) / numBullets;
+          bossProjectiles.push({
+            x: boss.x + boss.width / 2,
+            y: boss.y + boss.height / 2,
+            dx: Math.cos(angle) * 2, // Adjusted projectile speed
+            dy: Math.sin(angle) * 2, // Adjusted projectile speed
+            radius: 4
+          });
+        }
+        boss.fireCooldown = 120;
+      }
+    }
+  }
+
+  // Update boss projectiles
+  for (let i = bossProjectiles.length - 1; i >= 0; i--) {
+    const p = bossProjectiles[i];
+    p.x += p.dx;
+    p.y += p.dy;
+    if (
+      p.x < 0 ||
+      p.x > canvas.width ||
+      p.y < 0 ||
+      p.y > canvas.height
+    ) {
+      bossProjectiles.splice(i, 1);
+    }
+  }
+
+  // Update explosions
+  for (let i = explosions.length - 1; i >= 0; i--) {
+    explosions[i].frame++;
+    if (explosions[i].frame >= 16) {
+      explosions.splice(i, 1);
+    }
+  }
+
+  // Collision detection
+  for (let bi = bullets.length - 1; bi >= 0; bi--) {
+    const b = bullets[bi];
+
+    // Shrink boss hitbox for more accurate collision detection
+    const bossHitboxPadding = 10;
+    if (boss && 
+        b.x < boss.x + boss.width - bossHitboxPadding &&
+        b.x + b.width > boss.x + bossHitboxPadding &&
+        b.y < boss.y + boss.height - bossHitboxPadding &&
+        b.y + b.height > boss.y + bossHitboxPadding) {
+      console.log("Bullet hit boss.");
+      bullets.splice(bi, 1);
+      boss.health--;
+      explosions.push({ x: boss.x + boss.width / 2, y: boss.y + boss.height / 2, frame: 0 });
+      score += 250;
+      scorePopups.push({
+        text: "+250",
+        x: boss.x + boss.width / 2,
+        y: boss.y,
+        opacity: 1
+      });
+      continue;
+    }
+
+    for (let ei = enemies.length - 1; ei >= 0; ei--) {
+      const e = enemies[ei];
+      if (b.x < e.x + e.width && b.x + b.width > e.x && b.y < e.y + e.height && b.y + b.height > e.y) {
+        console.log("Bullet hit enemy.");
+        enemies.splice(ei, 1);
+        bullets.splice(bi, 1);
+        explosions.push({ x: e.x + e.width / 2, y: e.y + e.height / 2, frame: 0 });
+        score += 100;
+        scorePopups.push({
+          text: "+100",
+          x: e.x + e.width / 2,
+          y: e.y,
+          opacity: 1
+        });
+        break;
+      }
+    }
+  }
+
+  // Update score popups
+  for (let i = scorePopups.length - 1; i >= 0; i--) {
+    const popup = scorePopups[i];
+    popup.y -= 0.5;
+    popup.opacity -= 0.02;
+    if (popup.opacity <= 0) {
+      scorePopups.splice(i, 1);
+    }
+  }
+
+  // Move to next wave if current wave is cleared
+  if (waves[currentWave].created && enemies.length === 0) {
+    console.log("Wave cleared, moving to next wave.");
+    currentWave++;
+    if (currentWave >= waves.length) {
+      console.log("All waves completed. Game over.");
+      alert("You Win!"); // Display "You Win" message
+      return; // Exit the function to prevent further errors
+    }
+    createWave(currentWave);
+  }
+
+  // Update UI
+  scoreDisplay.textContent = `SCORE: ${score}`;
+  healthDisplay.textContent = `HEALTH: ${playerHealth}`;
+}
+
+    function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Draw player
+  if (player.spriteLoaded) {
+    ctx.drawImage(player.sprite, player.x, player.y, player.width, player.height);
+  } else {
+    ctx.fillStyle = 'white';
+    ctx.fillRect(player.x, player.y, player.width, player.height);
+  }
+
+  // Draw bullets
+  bullets.forEach(b => {
+    ctx.fillStyle = b.color;
+    ctx.fillRect(b.x, b.y, b.width, b.height);
+  });
+
+  // Draw enemies
+  waves[currentWave].enemies.forEach(e => {
+    ctx.fillStyle = enemyColors[Math.floor(Math.random() * enemyColors.length)];
+    ctx.fillRect(e.x, e.y, e.width, e.height);
+  });
+
+  // Draw explosions
+  explosions.forEach(exp => {
+    const frameSize = 64;
+    const framesPerRow = 4;
+    const sx = (exp.frame % framesPerRow) * frameSize;
+    const sy = Math.floor(exp.frame / framesPerRow) * frameSize;
+
+    ctx.drawImage(
+      explosionSprite,
+      sx, sy, frameSize, frameSize,
+      exp.x - frameSize / 2, exp.y - frameSize / 2,
+      frameSize, frameSize
+    );
+  });
+
+  // Draw score popups
+  ctx.fillStyle = "#fff";
+  scorePopups.forEach((popup, index) => {
+    ctx.font = "12px monospace";
+    ctx.fillText(popup.text, popup.x, popup.y);
+    popup.y -= 1; // Move upward
+    popup.opacity -= 0.006; // Fade out
+    if (popup.opacity <= 0) {
+      scorePopups.splice(index, 1); // Remove the popup when it's faded out
+    }
+  });
+
+  // Draw boss if present
+  if (boss) {
+    ctx.drawImage(bossImage, boss.x, boss.y, boss.width, boss.height);
+
+    // Debug: draw the boss hitbox (optional, for testing)
+    ctx.strokeStyle = 'lime';
+    ctx.strokeRect(
+      boss.x + 10,  // Added padding
+      boss.y + 10,  // Added padding
+      boss.width - 20, // Shrinking hitbox by 20px (10px on each side)
+      boss.height - 20 // Shrinking hitbox by 20px (10px on each side)
+    );
+  }
+
+  // Draw boss projectiles
+  bossProjectiles.forEach(p => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+    ctx.fillStyle = 'red';
+    ctx.fill();
+  });
+
+  // Draw "You Win" message if the game is over
+  if (currentWave >= waves.length) {
+    ctx.fillStyle = 'white';
+    ctx.font = '48px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText("You Win!", canvas.width / 2, canvas.height / 2);
+  }
+}
+
+    function resetGame() {
+      playerHealth = 3;
+      score = 0;
+      currentWave = 0;
+      waves.forEach(wave => wave.created = false);
+      bullets.length = 0;
+      explosions.length = 0;
+    }
+
+    function gameLoop() {
+      update();
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    // Initialize the game
+    resetGame();
+    gameLoop();
+  </script>
+</body>
+</html>
